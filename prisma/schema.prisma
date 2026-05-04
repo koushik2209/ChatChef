@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Seller {
+  id               String     @id @default(cuid())
+  name             String
+  whatsapp_number  String     @unique
+  upi_id           String
+  is_active        Boolean    @default(true)
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+
+  menu_items       MenuItem[]
+  customers        Customer[]
+  orders           Order[]
+}
+
+model MenuItem {
+  id              String   @id @default(cuid())
+  seller_id       String
+  name            String
+  price           Decimal  @db.Decimal(10, 2)
+  original_price  Decimal? @db.Decimal(10, 2)
+  category        String
+  image_url       String?
+  is_available    Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  seller          Seller   @relation(fields: [seller_id], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  seller_id        String
+  whatsapp_number  String
+  name             String?
+  address          String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  seller           Seller   @relation(fields: [seller_id], references: [id], onDelete: Cascade)
+  orders           Order[]
+
+  @@unique([seller_id, whatsapp_number])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  seller_id       String
+  customer_id     String
+  items           Json
+  total           Decimal       @db.Decimal(10, 2)
+  status          OrderStatus   @default(NEW)
+  payment_status  PaymentStatus @default(PENDING)
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  seller          Seller        @relation(fields: [seller_id], references: [id], onDelete: Cascade)
+  customer        Customer      @relation(fields: [customer_id], references: [id])
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  DONE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
