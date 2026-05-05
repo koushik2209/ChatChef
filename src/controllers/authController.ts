@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import prisma from '../models/prisma';
 import { generateOtp, verifyOtp } from '../services/authService';
 
+// ── OTP login ────────────────────────────────────────────────────────────────
+
 export async function requestOtp(req: Request, res: Response): Promise<void> {
   const { phone } = req.body as { phone?: string };
 
@@ -13,13 +15,11 @@ export async function requestOtp(req: Request, res: Response): Promise<void> {
 
   const seller = await prisma.seller.findUnique({ where: { whatsapp_number: phone } });
   if (!seller) {
-    // Don't reveal whether the number exists — same response either way
     res.json({ success: true, message: 'OTP sent if number is registered' });
     return;
   }
 
   const otp = generateOtp(phone);
-  // In production: send via SMS/WhatsApp. For now, log to console.
   console.log(`[auth] OTP for ${phone}: ${otp}`);
 
   res.json({ success: true, message: 'OTP sent if number is registered' });
@@ -59,7 +59,60 @@ export async function verifyOtpHandler(req: Request, res: Response): Promise<voi
         name: seller.name,
         whatsapp_number: seller.whatsapp_number,
         upi_id: seller.upi_id,
+        slug: seller.slug,
       },
+    },
+  });
+}
+
+// ── Registration ─────────────────────────────────────────────────────────────
+
+function generateSlug(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+async function generateUniqueSlug(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const slug = generateSlug();
+    const existing = await prisma.seller.findUnique({ where: { slug } });
+    if (!existing) return slug;
+  }
+  throw new Error('Could not generate unique slug after 10 attempts');
+}
+
+export async function register(req: Request, res: Response): Promise<void> {
+  const { name, whatsapp_number, upi_id } = req.body as {
+    name?: string;
+    whatsapp_number?: string;
+    upi_id?: string;
+  };
+
+  if (!name || !whatsapp_number || !upi_id) {
+    res.status(400).json({ success: false, message: 'name, whatsapp_number, and upi_id are required' });
+    return;
+  }
+
+  const existing = await prisma.seller.findUnique({ where: { whatsapp_number } });
+  if (existing) {
+    res.status(409).json({ success: false, message: 'This WhatsApp number is already registered' });
+    return;
+  }
+
+  const slug = await generateUniqueSlug();
+
+  const seller = await prisma.seller.create({
+    data: { name, whatsapp_number, upi_id, slug, is_active: true },
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      id: seller.id,
+      name: seller.name,
+      whatsapp_number: seller.whatsapp_number,
+      upi_id: seller.upi_id,
+      slug: seller.slug,
     },
   });
 }
