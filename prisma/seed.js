@@ -4,11 +4,11 @@ const prisma = new PrismaClient();
 
 async function main() {
   const seller = await prisma.seller.upsert({
-    where: { whatsapp_number: '919999999999' },
+    where: { whatsapp_number: '15551571828' },
     update: {},
     create: {
       name: 'Priya Home Kitchen',
-      whatsapp_number: '919999999999',
+      whatsapp_number: '15551571828',
       upi_id: 'priya@upi',
       is_active: true,
     },
