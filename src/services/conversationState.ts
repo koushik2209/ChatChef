@@ -1,4 +1,5 @@
 export enum ConversationStep {
+  // Customer ordering steps
   GREETING = 'GREETING',
   LANGUAGE_SELECT = 'LANGUAGE_SELECT',
   MENU = 'MENU',
@@ -7,6 +8,13 @@ export enum ConversationStep {
   LOCATION = 'LOCATION',
   ORDER_SUMMARY = 'ORDER_SUMMARY',
   PAYMENT = 'PAYMENT',
+  // Seller management steps
+  SELLER_GREETING = 'SELLER_GREETING',
+  SELLER_ADD_NAME = 'SELLER_ADD_NAME',
+  SELLER_ADD_CATEGORY = 'SELLER_ADD_CATEGORY',
+  SELLER_ADD_PRICE = 'SELLER_ADD_PRICE',
+  SELLER_ADD_IMAGE = 'SELLER_ADD_IMAGE',
+  SELLER_CONFIRM = 'SELLER_CONFIRM',
 }
 
 export interface CartItem {
@@ -23,6 +31,13 @@ export interface CachedMenuItem {
   category: string;
 }
 
+export interface SellerItemDraft {
+  name?: string;
+  category?: string;
+  price?: number;
+  image_url?: string;
+}
+
 export interface ConversationSession {
   step: ConversationStep;
   phoneNumberId: string;
@@ -37,11 +52,10 @@ export interface ConversationSession {
   deliveryType: 'delivery' | 'pickup' | undefined;
   location: { latitude?: number; longitude?: number; address?: string } | undefined;
   locationMode: 'gps' | 'text' | undefined;
+  sellerDraft: SellerItemDraft | undefined;
   lastUpdated: Date;
 }
 
-// Keyed by `${customerPhone}:${phoneNumberId}` so the same customer number
-// can have independent sessions across different seller WhatsApp numbers.
 const sessions = new Map<string, ConversationSession>();
 
 function sessionKey(customerPhone: string, phoneNumberId: string): string {
@@ -75,6 +89,7 @@ export function upsertSession(
     deliveryType: undefined,
     location: undefined,
     locationMode: undefined,
+    sellerDraft: undefined,
     ...existing,
     ...updates,
     lastUpdated: new Date(),
