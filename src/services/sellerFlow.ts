@@ -40,6 +40,11 @@ async function onSellerGreeting(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
+  if (!session.sellerId) {
+    console.error('[sellerFlow] Session missing sellerId');
+    return;
+  }
+
   if (message.type === 'button_reply') {
     if (message.buttonId === 'seller_done') {
       await wa.sendText(phone, phoneNumberId, '👍 All done! Your menu is up to date.');
@@ -145,6 +150,11 @@ async function onSellerConfirm(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
+  if (!session.sellerId) {
+    console.error('[sellerFlow] Session missing sellerId');
+    return;
+  }
+
   if (message.type !== 'button_reply') return;
 
   if (message.buttonId === 'seller_start_over') {
@@ -156,6 +166,13 @@ async function onSellerConfirm(
 
   if (message.buttonId === 'seller_confirm_item') {
     const draft = session.sellerDraft!;
+    if (!draft.name || !draft.category || draft.price == null) {
+      await wa.sendText(phone, phoneNumberId, '⚠️ Something went wrong. Please start over.');
+      upsertSession(phone, phoneNumberId, { sellerDraft: undefined });
+      advanceStep(phone, phoneNumberId, ConversationStep.SELLER_ADD_NAME);
+      await wa.sendText(phone, phoneNumberId, "What's the item name?");
+      return;
+    }
     await prisma.menuItem.create({
       data: {
         seller_id: session.sellerId!,
