@@ -27,17 +27,16 @@ function apiUrl(phoneNumberId: string): string {
 }
 
 async function send(phoneNumberId: string, payload: object): Promise<void> {
+  const body = { messaging_product: 'whatsapp', recipient_type: 'individual', ...payload };
+  console.log('[wa] sending to:', (body as any).to, '| type:', (body as any).type);
   try {
-    await axios.post(
-      apiUrl(phoneNumberId),
-      { messaging_product: 'whatsapp', recipient_type: 'individual', ...payload },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    await axios.post(apiUrl(phoneNumberId), body, {
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log('[wa] sent OK');
   } catch (err) {
     const e = err as AxiosError;
     console.error('[wa] API error:', JSON.stringify(e.response?.data ?? e.message));
