@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { queryClient } from './lib/queryClient';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Home from './pages/Home';
 import Orders from './pages/Orders';
 import Menu from './pages/Menu';
@@ -21,11 +22,9 @@ function Router() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route
-          path="/login"
-          element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
-        />
-        <Route path="/"        element={<Guard><Home /></Guard>} />
+        <Route path="/login"    element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/"         element={<Guard><Home /></Guard>} />
         <Route path="/orders"  element={<Guard><Orders /></Guard>} />
         <Route path="/menu"    element={<Guard><Menu /></Guard>} />
         <Route path="/cooking" element={<Guard><CookingSummary /></Guard>} />

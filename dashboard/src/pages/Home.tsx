@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, ShoppingBag, Clock, LogOut, RefreshCw } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Clock, LogOut, RefreshCw, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { fetchSummary } from '../api/dashboard';
 import { useAuth } from '../hooks/useAuth';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import Spinner from '../components/Spinner';
+
+const WA_NUMBER = import.meta.env.VITE_CHATCHEF_WA_NUMBER ?? '';
 
 function fmt(n: number) {
   return `₹${n.toLocaleString('en-IN')}`;
@@ -14,6 +17,7 @@ function fmt(n: number) {
 export default function Home() {
   const { seller, logout } = useAuth();
   const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['dashboard'],
@@ -22,6 +26,18 @@ export default function Home() {
   });
 
   const today = data?.today;
+  const link = seller?.slug ? `https://wa.me/${WA_NUMBER}?text=${seller.slug}` : '';
+
+  async function copyLink() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — silent fail
+    }
+  }
 
   return (
     <Layout
@@ -46,6 +62,19 @@ export default function Home() {
           <p className="text-[#888] text-sm">Good day,</p>
           <h2 className="text-xl font-bold text-white">{seller?.name ?? 'Chef'} 👋</h2>
         </div>
+
+        {/* Shareable link */}
+        {link && (
+          <div className="bg-[#111111] border border-[#25D366]/30 rounded-2xl p-4">
+            <p className="text-xs text-[#25D366] font-medium mb-2">Your customer order link</p>
+            <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-xl px-3 py-2.5">
+              <span className="text-sm text-white flex-1 truncate">{link}</span>
+              <button onClick={copyLink} aria-label={copied ? 'Copied' : 'Copy link'} className="text-[#888] hover:text-white shrink-0">
+                {copied ? <Check size={15} color="#25D366" /> : <Copy size={15} />}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Stat cards */}
         {isLoading ? (
