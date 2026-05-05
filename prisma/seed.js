@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -24,7 +24,6 @@ async function main() {
     { name: 'Mango Lassi',      price:  60, original_price: null, category: 'Drinks',     image_url: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=400' },
   ];
 
-  // Clear existing menu items for this seller and recreate (idempotent seed)
   await prisma.menuItem.deleteMany({ where: { seller_id: seller.id } });
   await prisma.menuItem.createMany({
     data: menuItems.map((item) => ({ ...item, seller_id: seller.id, is_available: true })),
