@@ -20,7 +20,7 @@ export async function requestOtp(req: Request, res: Response): Promise<void> {
   }
 
   const otp = generateOtp(phone);
-  console.log(`[auth] OTP for ${phone}: ${otp}`);
+  console.log(`[auth] OTP for ${phone}: ${otp}`); // TODO: remove — dev stub, replace with real delivery
 
   res.json({ success: true, message: 'OTP sent if number is registered' });
 }
@@ -72,13 +72,13 @@ function generateSlug(): string {
   return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
-async function generateUniqueSlug(): Promise<string> {
+async function generateUniqueSlug(): Promise<string | null> {
   for (let i = 0; i < 10; i++) {
     const slug = generateSlug();
     const existing = await prisma.seller.findUnique({ where: { slug } });
     if (!existing) return slug;
   }
-  throw new Error('Could not generate unique slug after 10 attempts');
+  return null;
 }
 
 export async function register(req: Request, res: Response): Promise<void> {
@@ -100,6 +100,10 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   const slug = await generateUniqueSlug();
+  if (!slug) {
+    res.status(500).json({ success: false, message: 'Registration failed, please try again' });
+    return;
+  }
 
   const seller = await prisma.seller.create({
     data: { name, whatsapp_number, upi_id, slug, is_active: true },
