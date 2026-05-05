@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import prisma from '../models/prisma';
 import webhookRouter from './webhook';
 import authRouter from './auth';
 import ordersRouter from './orders';
@@ -11,6 +12,15 @@ const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ success: true, message: 'ChatChef API is running' });
+});
+
+router.get('/seed', async (_req, res) => {
+  const seller = await prisma.seller.upsert({
+    where: { whatsapp_number: '15551571828' },
+    update: {},
+    create: { name: 'Priya Home Kitchen', whatsapp_number: '15551571828', upi_id: 'priya@upi', is_active: true },
+  });
+  res.json({ success: true, data: seller });
 });
 
 router.use('/webhook', webhookRouter);
