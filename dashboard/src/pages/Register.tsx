@@ -23,7 +23,7 @@ export default function Register() {
     onError: (err: any) => setError(err.response?.data?.message ?? 'Registration failed. Try again.'),
   });
 
-  const link = `https://wa.me/${WA_NUMBER}?text=${slug}`;
+  const link = slug && WA_NUMBER ? `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(slug)}` : '';
 
   async function copyLink() {
     try {

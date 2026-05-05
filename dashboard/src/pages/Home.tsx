@@ -26,7 +26,9 @@ export default function Home() {
   });
 
   const today = data?.today;
-  const link = seller?.slug ? `https://wa.me/${WA_NUMBER}?text=${seller.slug}` : '';
+  const link = seller?.slug && WA_NUMBER
+    ? `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(seller.slug)}`
+    : '';
 
   async function copyLink() {
     if (!link) return;
