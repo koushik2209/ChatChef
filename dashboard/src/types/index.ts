@@ -76,4 +76,5 @@ export interface Seller {
   name: string;
   whatsapp_number: string;
   upi_id: string;
+  slug: string;
 }
