@@ -4,17 +4,18 @@ const prisma = new PrismaClient();
 
 async function main() {
   const seller = await prisma.seller.upsert({
-    where: { whatsapp_number: '15551571828' },
+    where: { whatsapp_number: '919999999999' },
     update: {},
     create: {
       name: 'Priya Home Kitchen',
-      whatsapp_number: '15551571828',
+      whatsapp_number: '919999999999',
       upi_id: 'priya@upi',
+      slug: 'test1',
       is_active: true,
     },
   });
 
-  console.log(`Seller: ${seller.name} (id: ${seller.id})`);
+  console.log(`Seller: ${seller.name} (slug: ${seller.slug})`);
 
   const menuItems = [
     { name: 'Butter Chicken',  price: 180, original_price: 220, category: 'Main Course', image_url: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400' },

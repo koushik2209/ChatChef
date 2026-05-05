@@ -18,7 +18,7 @@ router.get('/seed', async (_req, res) => {
   const seller = await prisma.seller.upsert({
     where: { whatsapp_number: '15551571828' },
     update: {},
-    create: { name: 'Priya Home Kitchen', whatsapp_number: '15551571828', upi_id: 'priya@upi', is_active: true },
+    create: { name: 'Priya Home Kitchen', whatsapp_number: '15551571828', upi_id: 'priya@upi', slug: 'test1', is_active: true },
   });
   res.json({ success: true, data: seller });
 });
