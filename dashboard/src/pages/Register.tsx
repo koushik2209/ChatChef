@@ -25,10 +25,14 @@ export default function Register() {
 
   const link = `https://wa.me/${WA_NUMBER}?text=${slug}`;
 
-  function copyLink() {
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — silent fail
+    }
   }
 
   const valid = form.name && form.whatsapp_number && form.upi_id;
@@ -91,8 +95,9 @@ export default function Register() {
             { label: 'UPI ID', key: 'upi_id' as const, placeholder: 'yourname@upi', type: 'text' },
           ].map(({ label, key, placeholder, type }) => (
             <div key={key}>
-              <label className="block text-xs text-[#888] font-medium mb-1.5">{label}</label>
+              <label htmlFor={key} className="block text-xs text-[#888] font-medium mb-1.5">{label}</label>
               <input
+                id={key}
                 type={type}
                 placeholder={placeholder}
                 value={form[key]}
