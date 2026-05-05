@@ -1,39 +1,37 @@
 import { Request, Response } from 'express';
-import { WhatsAppWebhookPayload } from '../types/whatsapp';
-import { parseWebhookPayload, handleIncomingMessage } from '../services/messageHandler';
+import { handleIncomingMessage } from '../services/messageHandler';
+import { ParsedMessage } from '../types/whatsapp';
 
-// GET /webhook — Meta hub verification handshake
-export function verifyWebhook(req: Request, res: Response): void {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
-  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-    console.log('[webhook] Verification successful');
-    res.status(200).send(challenge);
-    return;
-  }
-
-  console.warn('[webhook] Verification failed — token mismatch or wrong mode');
-  res.sendStatus(403);
+// GET /webhook — health check (Twilio doesn't use challenge verification)
+export function verifyWebhook(_req: Request, res: Response): void {
+  res.sendStatus(200);
 }
 
-// POST /webhook — incoming messages from Meta
+// POST /webhook — incoming messages from Twilio WhatsApp
 export async function receiveWebhook(req: Request, res: Response): Promise<void> {
-  // Always respond 200 immediately so Meta doesn't retry
+  // Respond 200 immediately so Twilio doesn't retry
   res.sendStatus(200);
 
-  const body = req.body as WhatsAppWebhookPayload;
+  const rawFrom = req.body.From as string | undefined;
+  const text = (req.body.Body as string | undefined) ?? '';
+  const profileName = req.body.ProfileName as string | undefined;
 
-  if (body.object !== 'whatsapp_business_account') return;
+  // Twilio sends From as "whatsapp:+919876543210" — strip prefix
+  const from = rawFrom?.replace(/^whatsapp:\+/, '');
+  if (!from) return;
 
-  const messages = parseWebhookPayload(body);
+  const message: ParsedMessage = {
+    from,
+    phoneNumberId: '',
+    displayPhoneNumber: '',
+    contactName: profileName,
+    type: 'text',
+    text,
+  };
 
-  for (const message of messages) {
-    try {
-      await handleIncomingMessage(message);
-    } catch (err) {
-      console.error(`[webhook] Error handling message from ${message.from}:`, err);
-    }
+  try {
+    await handleIncomingMessage(message);
+  } catch (err) {
+    console.error(`[webhook] Error handling message from ${from}:`, err);
   }
 }

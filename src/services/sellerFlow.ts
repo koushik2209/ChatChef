@@ -33,7 +33,7 @@ export async function handleSellerStep(
 }
 
 // SELLER_GREETING handles both the initial greeting (any message type)
-// and the "Add Item" / "Done" button replies that come back after greeting.
+// and the numbered replies after greeting (1 = Add Item, 2 = Done).
 async function onSellerGreeting(
   phone: string,
   phoneNumberId: string,
@@ -45,20 +45,22 @@ async function onSellerGreeting(
     return;
   }
 
-  if (message.type === 'button_reply') {
-    if (message.buttonId === 'seller_done') {
+  if (message.type === 'text') {
+    const choice = message.text.trim();
+    // Button layout: 1. Add Item  2. Done
+    if (choice === '2') {
       await wa.sendText(phone, phoneNumberId, '👍 All done! Your menu is up to date.');
       clearSession(phone, phoneNumberId);
       return;
     }
-    if (message.buttonId === 'seller_add_item') {
+    if (choice === '1') {
       await wa.sendText(phone, phoneNumberId, "What's the item name?");
       advanceStep(phone, phoneNumberId, ConversationStep.SELLER_ADD_NAME);
       return;
     }
   }
 
-  // Any non-button message (first DM or unknown input) → send the greeting
+  // Any non-numeric message (first DM or unknown input) → send the greeting
   const count = await prisma.menuItem.count({ where: { seller_id: session.sellerId! } });
   await wa.sendButtons(
     phone,
@@ -117,7 +119,7 @@ async function onSellerAddPrice(
   await wa.sendButtons(
     phone,
     phoneNumberId,
-    '🖼️ Do you have an image URL for this item?\n\nPaste the URL or tap Skip.',
+    '🖼️ Do you have an image URL for this item?\n\nPaste the URL or reply *1* to skip.',
     [{ id: 'seller_skip_image', title: 'Skip' }]
   );
   advanceStep(phone, phoneNumberId, ConversationStep.SELLER_ADD_IMAGE);
@@ -129,14 +131,13 @@ async function onSellerAddImage(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
+  if (message.type !== 'text') return;
   let draft: SellerItemDraft = { ...session.sellerDraft };
 
-  if (message.type === 'button_reply' && message.buttonId === 'seller_skip_image') {
-    // no image — proceed with draft as-is
-  } else if (message.type === 'text' && message.text.trim()) {
-    draft = { ...draft, image_url: message.text.trim() };
-  } else {
-    return;
+  const input = message.text.trim();
+  // "1" = skip (button layout: 1. Skip); anything else treated as URL
+  if (input !== '1' && input) {
+    draft = { ...draft, image_url: input };
   }
 
   const updated = upsertSession(phone, phoneNumberId, { sellerDraft: draft });
@@ -155,16 +156,18 @@ async function onSellerConfirm(
     return;
   }
 
-  if (message.type !== 'button_reply') return;
+  if (message.type !== 'text') return;
+  const choice = message.text.trim();
 
-  if (message.buttonId === 'seller_start_over') {
+  // Button layout: 1. Confirm  2. Start Over
+  if (choice === '2') {
     upsertSession(phone, phoneNumberId, { sellerDraft: undefined });
     await wa.sendText(phone, phoneNumberId, "No problem! Let's start over.\n\nWhat's the item name?");
     advanceStep(phone, phoneNumberId, ConversationStep.SELLER_ADD_NAME);
     return;
   }
 
-  if (message.buttonId === 'seller_confirm_item') {
+  if (choice === '1') {
     const draft = session.sellerDraft!;
     if (!draft.name || !draft.category || draft.price == null) {
       await wa.sendText(phone, phoneNumberId, '⚠️ Something went wrong. Please start over.');

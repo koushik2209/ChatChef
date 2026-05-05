@@ -53,7 +53,7 @@ async function onGreeting(
   phoneNumberId: string,
   session: ConversationSession
 ): Promise<void> {
-  const m = getMessages('en'); // greeting always in English before language is chosen
+  const m = getMessages('en');
   await wa.sendButtons(
     phone,
     phoneNumberId,
@@ -69,7 +69,9 @@ async function onLanguageSelect(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  const lang = message.type === 'button_reply' && message.buttonId === 'lang_hi' ? 'hi' : 'en';
+  if (message.type !== 'text') return;
+  // Button layout: 1. English  2. हिंदी
+  const lang = message.text.trim() === '2' ? 'hi' : 'en';
   const menuItems = await fetchMenuItems(session.sellerId!);
   const updated = upsertSession(phone, phoneNumberId, { language: lang, menuItems });
   await sendMenu(phone, phoneNumberId, updated);
@@ -82,9 +84,13 @@ async function onMenu(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  if (message.type !== 'list_reply') return;
+  if (message.type !== 'text') return;
+  const choice = parseInt(message.text.trim(), 10);
+  if (isNaN(choice) || choice < 1) return;
 
-  const selected = session.menuItems?.find((i) => i.id === message.itemId);
+  // Items are listed 1-based across all sections in display order
+  const items = session.menuItems ?? [];
+  const selected = items[choice - 1];
   if (!selected) return;
 
   const cart = addToCart(session.cart, selected);
@@ -99,15 +105,17 @@ async function onCart(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  if (message.type !== 'button_reply') return;
+  if (message.type !== 'text') return;
+  const choice = message.text.trim();
 
-  if (message.buttonId === 'cart_add_more') {
+  // Button layout: 1. Add More  2. Checkout
+  if (choice === '1') {
     await sendMenu(phone, phoneNumberId, session);
     advanceStep(phone, phoneNumberId, ConversationStep.MENU);
     return;
   }
 
-  if (message.buttonId === 'cart_checkout') {
+  if (choice === '2') {
     const m = getMessages(session.language);
     await wa.sendButtons(phone, phoneNumberId, m.deliveryBody, m.deliveryButtons, {
       header: m.deliveryHeader,
@@ -122,9 +130,11 @@ async function onDeliveryType(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  if (message.type !== 'button_reply') return;
+  if (message.type !== 'text') return;
+  const choice = message.text.trim();
 
-  const isPickup = message.buttonId === 'delivery_pickup';
+  // Button layout: 1. Delivery  2. Pickup
+  const isPickup = choice === '2';
   const deliveryType = isPickup ? 'pickup' : 'delivery';
   const updated = upsertSession(phone, phoneNumberId, { deliveryType });
 
@@ -133,9 +143,7 @@ async function onDeliveryType(
     advanceStep(phone, phoneNumberId, ConversationStep.ORDER_SUMMARY);
   } else {
     const m = getMessages(session.language);
-    await wa.sendButtons(phone, phoneNumberId, m.locationBody, m.locationButtons, {
-      header: m.locationHeader,
-    });
+    await wa.sendText(phone, phoneNumberId, m.locationTextPrompt);
     advanceStep(phone, phoneNumberId, ConversationStep.LOCATION);
   }
 }
@@ -146,40 +154,12 @@ async function onLocation(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  const m = getMessages(session.language);
+  if (message.type !== 'text' || !message.text.trim()) return;
 
-  // Customer chose how to share address — send the appropriate prompt and wait
-  if (message.type === 'button_reply') {
-    if (message.buttonId === 'loc_gps') {
-      upsertSession(phone, phoneNumberId, { locationMode: 'gps' });
-      await wa.sendText(phone, phoneNumberId, m.locationGpsPrompt);
-    } else if (message.buttonId === 'loc_text') {
-      upsertSession(phone, phoneNumberId, { locationMode: 'text' });
-      await wa.sendText(phone, phoneNumberId, m.locationTextPrompt);
-    }
-    return; // Stay in LOCATION — wait for actual location/text
-  }
-
-  // GPS location shared
-  if (message.type === 'location') {
-    const location = {
-      latitude: message.latitude,
-      longitude: message.longitude,
-      address: message.address,
-    };
-    const updated = upsertSession(phone, phoneNumberId, { location });
-    await sendOrderSummary(phone, phoneNumberId, updated);
-    advanceStep(phone, phoneNumberId, ConversationStep.ORDER_SUMMARY);
-    return;
-  }
-
-  // Address typed as text (only accept if location prompt was already sent)
-  if (message.type === 'text' && session.locationMode) {
-    const location = { address: message.text };
-    const updated = upsertSession(phone, phoneNumberId, { location });
-    await sendOrderSummary(phone, phoneNumberId, updated);
-    advanceStep(phone, phoneNumberId, ConversationStep.ORDER_SUMMARY);
-  }
+  const location = { address: message.text.trim() };
+  const updated = upsertSession(phone, phoneNumberId, { location });
+  await sendOrderSummary(phone, phoneNumberId, updated);
+  advanceStep(phone, phoneNumberId, ConversationStep.ORDER_SUMMARY);
 }
 
 async function onOrderSummary(
@@ -188,9 +168,11 @@ async function onOrderSummary(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  if (message.type !== 'button_reply') return;
+  if (message.type !== 'text') return;
+  const choice = message.text.trim();
 
-  if (message.buttonId === 'summary_confirm') {
+  // Button layout: 1. Confirm Order  2. Cancel
+  if (choice === '1') {
     const total = cartTotal(session.cart);
     const qrUrl = upiQrUrl(session.upiId!, session.sellerName!, total);
     const m = getMessages(session.language);
@@ -206,7 +188,7 @@ async function onOrderSummary(
     return;
   }
 
-  if (message.buttonId === 'summary_cancel') {
+  if (choice === '2') {
     const m = getMessages(session.language);
     await wa.sendText(phone, phoneNumberId, m.cancelled);
     clearSession(phone, phoneNumberId);
@@ -219,17 +201,18 @@ async function onPayment(
   session: ConversationSession,
   message: ParsedMessage
 ): Promise<void> {
-  if (message.type !== 'button_reply') return;
-
+  if (message.type !== 'text') return;
+  const choice = message.text.trim();
   const m = getMessages(session.language);
 
-  if (message.buttonId === 'payment_cancel') {
+  // Button layout: 1. I've Paid  2. Cancel
+  if (choice === '2') {
     await wa.sendText(phone, phoneNumberId, m.cancelled);
     clearSession(phone, phoneNumberId);
     return;
   }
 
-  if (message.buttonId === 'payment_done') {
+  if (choice === '1') {
     const total = cartTotal(session.cart);
 
     const customer = await findOrCreateCustomer(
@@ -260,7 +243,7 @@ async function sendMenu(
   const m = getMessages(session.language);
   const items = session.menuItems ?? [];
 
-  // Group by category, max 10 rows per section (WhatsApp list limit)
+  // Group by category for display, but keep a flat ordered list for 1-based selection
   const byCategory = new Map<string, CachedMenuItem[]>();
   for (const item of items) {
     const bucket = byCategory.get(item.category) ?? [];
@@ -304,11 +287,7 @@ async function sendOrderSummary(
 ): Promise<void> {
   const m = getMessages(session.language);
   const total = cartTotal(session.cart);
-  const locationStr =
-    session.location?.address ??
-    (session.location?.latitude != null
-      ? `${session.location.latitude}, ${session.location.longitude}`
-      : undefined);
+  const locationStr = session.location?.address;
 
   await wa.sendButtons(
     phone,
@@ -331,7 +310,7 @@ async function fetchMenuItems(sellerId: string): Promise<CachedMenuItem[]> {
 }
 
 function addToCart(cart: CartItem[], item: CachedMenuItem): CartItem[] {
-  const next = cart.map((c) => ({ ...c })); // shallow clone each item
+  const next = cart.map((c) => ({ ...c }));
   const existing = next.find((c) => c.menuItemId === item.id);
   if (existing) {
     existing.quantity += 1;
