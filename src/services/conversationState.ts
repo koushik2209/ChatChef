@@ -13,6 +13,7 @@ export enum ConversationStep {
   SELLER_ONBOARD_NAME = 'SELLER_ONBOARD_NAME',
   SELLER_ONBOARD_UPI = 'SELLER_ONBOARD_UPI',
   SELLER_ONBOARD_PHONE = 'SELLER_ONBOARD_PHONE',
+  SELLER_ONBOARD_OTP = 'SELLER_ONBOARD_OTP',
   // Seller menu management (recognised seller → ChatChef number)
   SELLER_MAIN_MENU = 'SELLER_MAIN_MENU',
   SELLER_ADD_ITEM_NAME = 'SELLER_ADD_ITEM_NAME',
@@ -42,6 +43,9 @@ export interface SellerOnboardingDraft {
   shopName?: string;
   upiId?: string;
   waNumber?: string;
+  otp?: string;
+  otpExpiry?: Date;
+  otpAttempts?: number;
 }
 
 export interface SellerItemDraft {

@@ -47,6 +47,7 @@ export async function handleSellerMessage(
     case ConversationStep.SELLER_ONBOARD_NAME:     return onOnboardName(phone, sid, session, message);
     case ConversationStep.SELLER_ONBOARD_UPI:      return onOnboardUpi(phone, sid, session, message);
     case ConversationStep.SELLER_ONBOARD_PHONE:    return onOnboardPhone(phone, sid, session, message);
+    case ConversationStep.SELLER_ONBOARD_OTP:      return onOnboardOtp(phone, sid, session, message);
     case ConversationStep.SELLER_MAIN_MENU:        return onMainMenu(phone, sid, session, message);
     case ConversationStep.SELLER_ADD_ITEM_NAME:    return onAddItemName(phone, sid, session, message);
     case ConversationStep.SELLER_ADD_ITEM_PRICE:   return onAddItemPrice(phone, sid, session, message);
@@ -158,6 +159,57 @@ async function onOnboardPhone(
     return;
   }
 
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+  upsertSession(phone, sid, {
+    sellerOnboardDraft: { ...draft, waNumber, otp, otpExpiry, otpAttempts: 0 },
+  });
+
+  await wa.sendText(
+    phone,
+    '',
+    `🔐 Your verification code is *${otp}*\n\nEnter this OTP to complete registration. Valid for 10 minutes.`
+  );
+  advanceStep(phone, sid, ConversationStep.SELLER_ONBOARD_OTP);
+}
+
+async function onOnboardOtp(
+  phone: string,
+  sid: string,
+  session: ConversationSession,
+  message: ParsedMessage
+): Promise<void> {
+  if (message.type !== 'text' || !message.text.trim()) return;
+
+  const draft = session.sellerOnboardDraft ?? {};
+
+  if (!draft.otp || !draft.otpExpiry || new Date() > draft.otpExpiry) {
+    await wa.sendText(phone, '', '⏰ OTP expired. Please start over.');
+    clearSession(phone, sid);
+    return;
+  }
+
+  const input = message.text.trim();
+  const attempts = (draft.otpAttempts ?? 0) + 1;
+
+  if (input !== draft.otp) {
+    if (attempts >= 3) {
+      await wa.sendText(phone, '', '❌ Too many incorrect attempts. Please start over.');
+      clearSession(phone, sid);
+      return;
+    }
+    upsertSession(phone, sid, { sellerOnboardDraft: { ...draft, otpAttempts: attempts } });
+    const remaining = 3 - attempts;
+    await wa.sendText(
+      phone,
+      '',
+      `❌ Incorrect OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+    );
+    return;
+  }
+
+  // OTP correct — create seller
   const slug = await generateUniqueSlug();
   if (!slug) {
     await wa.sendText(phone, '', '⚠️ Registration failed. Please try again.');
@@ -166,9 +218,9 @@ async function onOnboardPhone(
 
   await prisma.seller.create({
     data: {
-      name: draft.shopName,
-      whatsapp_number: waNumber,
-      upi_id: draft.upiId,
+      name: draft.shopName!,
+      whatsapp_number: draft.waNumber!,
+      upi_id: draft.upiId!,
       slug,
       is_active: true,
     },
