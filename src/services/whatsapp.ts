@@ -26,9 +26,13 @@ const API_KEY = process.env.GUPSHUP_API_KEY!;
 const APP_NAME = process.env.GUPSHUP_APP_NAME!;
 const SOURCE = process.env.CHATCHEF_NUMBER!;
 
+function stripPlus(num: string): string {
+  return num.startsWith('+') ? num.slice(1) : num;
+}
+
 async function post(to: string, message: object): Promise<void> {
-  const source = SOURCE.startsWith('+') ? SOURCE : `+${SOURCE}`;
-  const destination = to.startsWith('+') ? to : `+${to}`;
+  const source = stripPlus(SOURCE);
+  const destination = stripPlus(to);
   const messageJson = JSON.stringify(message);
 
   console.log('[wa] POST params:', { source, destination, 'src.name': APP_NAME, message: messageJson });
@@ -54,7 +58,7 @@ async function post(to: string, message: object): Promise<void> {
 export async function sendText(to: string, _phoneNumberId: string, text: string): Promise<void> {
   console.log('[wa] sending text to:', to);
   try {
-    await post(to, { isHSM: 'false', type: 'text', text });
+    await post(to, { type: 'text', text });
     console.log('[wa] sent OK');
   } catch (err) {
     console.error('[wa] Gupshup error:', err);
@@ -69,62 +73,35 @@ export async function sendButtons(
   buttons: WaButton[],
   opts: MsgOptions = {}
 ): Promise<void> {
-  // Gupshup quick_reply supports up to 3 buttons; fall back to numbered text for more
-  if (buttons.length <= 3) {
-    const message: Record<string, unknown> = {
-      type: 'quick_reply',
-      content: {
-        type: 'text',
-        text: body,
-      },
-      options: buttons.map((b) => ({ type: 'text', title: b.title, postbackText: b.id })),
-    };
-    try {
-      await post(to, message);
-    } catch (err) {
-      console.error('[wa] Gupshup sendButtons error:', err);
-      throw err;
-    }
-  } else {
-    let text = '';
-    if (opts.header) text += `*${opts.header}*\n\n`;
-    text += body + '\n\n';
-    text += buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n');
-    await sendText(to, '', text);
-  }
+  let text = '';
+  if (opts.header) text += `*${opts.header}*\n\n`;
+  text += body + '\n\n';
+  text += buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n');
+  await sendText(to, '', text);
 }
 
 export async function sendList(
   to: string,
   _phoneNumberId: string,
   body: string,
-  buttonLabel: string,
+  _buttonLabel: string,
   sections: ListSection[],
   opts: MsgOptions = {}
 ): Promise<void> {
-  const message = {
-    type: 'list',
-    title: opts.header ?? '',
-    body,
-    globalButtons: [{ type: 'text', title: buttonLabel }],
-    items: sections.map((sec) => ({
-      title: sec.title,
-      subtitle: '',
-      options: sec.rows.map((row) => ({
-        type: 'text',
-        title: row.title,
-        description: row.description ?? '',
-        postbackText: row.id,
-      })),
-    })),
-  };
-
-  try {
-    await post(to, message);
-  } catch (err) {
-    console.error('[wa] Gupshup sendList error:', err);
-    throw err;
+  let text = '';
+  if (opts.header) text += `*${opts.header}*\n\n`;
+  text += body + '\n\n';
+  let i = 1;
+  for (const sec of sections) {
+    if (sections.length > 1) text += `*${sec.title}*\n`;
+    for (const row of sec.rows) {
+      text += `${i}. ${row.title}`;
+      if (row.description) text += ` — ${row.description}`;
+      text += '\n';
+      i++;
+    }
   }
+  await sendText(to, '', text.trim());
 }
 
 export async function sendImage(
