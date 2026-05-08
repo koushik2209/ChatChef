@@ -21,7 +21,7 @@ interface MsgOptions {
   footer?: string;
 }
 
-const GUPSHUP_URL = 'https://api.gupshup.io/sm/api/v1/msg';
+const GUPSHUP_URL = 'https://api.gupshup.io/wa/api/v1/msg';
 const API_KEY = process.env.GUPSHUP_API_KEY!;
 const APP_NAME = process.env.GUPSHUP_APP_NAME!;
 const SOURCE = process.env.CHATCHEF_NUMBER!;
@@ -46,7 +46,7 @@ async function post(to: string, message: object): Promise<void> {
 export async function sendText(to: string, _phoneNumberId: string, text: string): Promise<void> {
   console.log('[wa] sending text to:', to);
   try {
-    await post(to, { type: 'text', text });
+    await post(to, { isHSM: 'false', type: 'text', text });
     console.log('[wa] sent OK');
   } catch (err) {
     console.error('[wa] Gupshup error:', err);
@@ -68,10 +68,8 @@ export async function sendButtons(
       content: {
         type: 'text',
         text: body,
-        ...(opts.header ? { header: opts.header } : {}),
-        ...(opts.footer ? { footer: opts.footer } : {}),
       },
-      options: buttons.map((b) => ({ type: 'text', title: b.title })),
+      options: buttons.map((b) => ({ type: 'text', title: b.title, postbackText: b.id })),
     };
     try {
       await post(to, message);
