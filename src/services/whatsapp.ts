@@ -27,20 +27,28 @@ const APP_NAME = process.env.GUPSHUP_APP_NAME!;
 const SOURCE = process.env.CHATCHEF_NUMBER!;
 
 async function post(to: string, message: object): Promise<void> {
+  const source = SOURCE.startsWith('+') ? SOURCE : `+${SOURCE}`;
+  const destination = to.startsWith('+') ? to : `+${to}`;
+  const messageJson = JSON.stringify(message);
+
+  console.log('[wa] POST params:', { source, destination, 'src.name': APP_NAME, message: messageJson });
+
   const body = new URLSearchParams({
     channel: 'whatsapp',
-    source: SOURCE,
-    destination: to,
+    source,
+    destination,
     'src.name': APP_NAME,
-    message: JSON.stringify(message),
+    message: messageJson,
   });
 
-  await axios.post(GUPSHUP_URL, body.toString(), {
+  const resp = await axios.post(GUPSHUP_URL, body.toString(), {
     headers: {
       apikey: API_KEY,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
   });
+
+  console.log('[wa] Gupshup response:', resp.status, JSON.stringify(resp.data));
 }
 
 export async function sendText(to: string, _phoneNumberId: string, text: string): Promise<void> {
