@@ -2,52 +2,63 @@ import { Request, Response } from 'express';
 import { handleIncomingMessage } from '../services/messageHandler';
 import { ParsedMessage } from '../types/whatsapp';
 
-// ── Gupshup inbound webhook types ────────────────────────────────────────────
+// ── Meta/WhatsApp Cloud API webhook types (Gupshup v3 format) ────────────────
 
-interface GupshupSender {
-  phone: string;
-  name?: string;
-}
-
-interface GupshupInteractive {
+interface MetaInteractive {
   type: 'button_reply' | 'list_reply';
   button_reply?: { id: string; title: string };
   list_reply?: { id: string; title: string; description?: string };
 }
 
-interface GupshupPayload {
+interface MetaMessage {
+  from: string;
+  id: string;
   type: string;
-  sender: GupshupSender;
-  receiver?: { phone: string };
-  text?: string;
-  interactive?: GupshupInteractive;
+  text?: { body: string };
+  interactive?: MetaInteractive;
 }
 
-interface GupshupWebhookBody {
-  type: string;
-  payload: GupshupPayload;
+interface MetaChangeValue {
+  metadata: { display_phone_number: string; phone_number_id: string };
+  contacts?: { profile?: { name?: string }; wa_id?: string }[];
+  messages?: MetaMessage[];
+}
+
+interface MetaWebhookBody {
+  object?: string;
+  entry?: { changes?: { value?: MetaChangeValue; field?: string }[] }[];
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
-function parseGupshupMessage(body: GupshupWebhookBody): ParsedMessage | null {
-  // Ignore delivery receipts, read events, and anything else that isn't a message
-  if (body?.type !== 'message') return null;
+const CHATCHEF_NUMBER = process.env.CHATCHEF_NUMBER ?? '';
 
-  const payload = body.payload;
-  const from = payload?.sender?.phone;
+function parseGupshupMessage(body: MetaWebhookBody): ParsedMessage | null {
+  const value = body?.entry?.[0]?.changes?.[0]?.value;
+  if (!value) return null;
+
+  // Status updates have no messages array — ignore them
+  const msg = value.messages?.[0];
+  if (!msg) return null;
+
+  const from = msg.from;
   if (!from) return null;
 
-  const displayPhoneNumber = payload.receiver?.phone ?? '';
-  const contactName = payload.sender.name;
+  const displayPhoneNumber = value.metadata?.display_phone_number ?? '';
+  const contactName = value.contacts?.[0]?.profile?.name;
+
+  console.log(
+    `[webhook] displayPhoneNumber="${displayPhoneNumber}" CHATCHEF_NUMBER="${CHATCHEF_NUMBER}" match=${displayPhoneNumber === CHATCHEF_NUMBER}`
+  );
+
   const base = { from, phoneNumberId: '', displayPhoneNumber, contactName };
 
-  switch (payload.type) {
+  switch (msg.type) {
     case 'text':
-      return { ...base, type: 'text', text: payload.text ?? '' };
+      return { ...base, type: 'text', text: msg.text?.body ?? '' };
 
     case 'interactive': {
-      const ia = payload.interactive;
+      const ia = msg.interactive;
       if (!ia) return { ...base, type: 'unsupported' };
 
       if (ia.type === 'button_reply' && ia.button_reply) {
@@ -89,7 +100,7 @@ export async function receiveWebhook(req: Request, res: Response): Promise<void>
 
   console.log('[webhook] raw body:', JSON.stringify(req.body, null, 2));
 
-  const message = parseGupshupMessage(req.body as GupshupWebhookBody);
+  const message = parseGupshupMessage(req.body as MetaWebhookBody);
   if (!message) return;
 
   console.log(`[webhook] ${message.type} from=${message.from} to=${message.displayPhoneNumber}`);
