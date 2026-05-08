@@ -1,42 +1,27 @@
 import { ParsedMessage } from '../types/whatsapp';
 import { getSession, upsertSession, ConversationStep } from './conversationState';
 import { handleConversationStep } from './conversationFlow';
-import { handleSellerStep } from './sellerFlow';
+import { handleSellerMessage } from './sellerFlow';
 import * as wa from './whatsapp';
 import prisma from '../models/prisma';
 
+const CHATCHEF_NUMBER = process.env.CHATCHEF_NUMBER ?? '';
+
 export async function handleIncomingMessage(message: ParsedMessage): Promise<void> {
-  const { from, phoneNumberId } = message;
+  const { from, phoneNumberId, displayPhoneNumber } = message;
 
-  // ── 1. Check if sender is a registered seller ──────────────────────────────
-  const sellerRecord = await prisma.seller.findFirst({
-    where: { whatsapp_number: from, is_active: true },
-    select: { id: true, name: true, upi_id: true },
-  });
-
-  if (sellerRecord) {
-    let session = getSession(from, phoneNumberId);
-    if (!session) {
-      session = upsertSession(from, phoneNumberId, {
-        step: ConversationStep.SELLER_GREETING,
-        displayPhoneNumber: message.displayPhoneNumber,
-        sellerId: sellerRecord.id,
-        sellerName: sellerRecord.name,
-        upiId: sellerRecord.upi_id,
-        customerName: message.contactName,
-      });
-    }
-    await handleSellerStep(from, phoneNumberId, session, message);
+  // ── Messages to the ChatChef number → seller flow ──────────────────────────
+  if (displayPhoneNumber && displayPhoneNumber === CHATCHEF_NUMBER) {
+    await handleSellerMessage(from, phoneNumberId, message);
     return;
   }
 
-  // ── 2. Customer flow ───────────────────────────────────────────────────────
+  // ── Messages to any other number → customer ordering flow ──────────────────
   let session = getSession(from, phoneNumberId);
 
   if (!session) {
-    // No existing session — need a valid seller slug to start one
-    const slug =
-      message.type === 'text' ? message.text.trim().toLowerCase() : null;
+    // No existing session — first message must be the seller's slug
+    const slug = message.type === 'text' ? message.text.trim().toLowerCase() : null;
 
     if (!slug) {
       await wa.sendText(from, phoneNumberId, "Please use your seller's link to place an order. 🛍️");
@@ -55,7 +40,7 @@ export async function handleIncomingMessage(message: ParsedMessage): Promise<voi
 
     session = upsertSession(from, phoneNumberId, {
       step: ConversationStep.GREETING,
-      displayPhoneNumber: message.displayPhoneNumber,
+      displayPhoneNumber,
       sellerId: seller.id,
       sellerName: seller.name,
       upiId: seller.upi_id,

@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 
 export interface WaButton {
   id: string;
@@ -21,89 +21,123 @@ interface MsgOptions {
   footer?: string;
 }
 
-function apiUrl(phoneNumberId: string): string {
-  const v = process.env.WHATSAPP_API_VERSION ?? 'v19.0';
-  return `https://graph.facebook.com/${v}/${phoneNumberId}/messages`;
-}
+const GUPSHUP_URL = 'https://api.gupshup.io/sm/api/v1/msg';
+const API_KEY = process.env.GUPSHUP_API_KEY!;
+const APP_NAME = process.env.GUPSHUP_APP_NAME!;
+const SOURCE = process.env.CHATCHEF_NUMBER!;
 
-async function send(phoneNumberId: string, payload: object): Promise<void> {
-  const body = { messaging_product: 'whatsapp', recipient_type: 'individual', ...payload };
-  console.log('[wa] sending to:', (body as any).to, '| type:', (body as any).type);
-  try {
-    await axios.post(apiUrl(phoneNumberId), body, {
-      headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    console.log('[wa] sent OK');
-  } catch (err) {
-    const e = err as AxiosError;
-    console.error('[wa] API error:', JSON.stringify(e.response?.data ?? e.message));
-    throw err;
-  }
-}
-
-export async function sendText(to: string, phoneNumberId: string, text: string): Promise<void> {
-  await send(phoneNumberId, {
-    to,
-    type: 'text',
-    text: { body: text, preview_url: false },
+async function post(to: string, message: object): Promise<void> {
+  const body = new URLSearchParams({
+    channel: 'whatsapp',
+    source: SOURCE,
+    destination: to,
+    'src.name': APP_NAME,
+    message: JSON.stringify(message),
   });
-}
 
-export async function sendButtons(
-  to: string,
-  phoneNumberId: string,
-  body: string,
-  buttons: WaButton[],
-  opts: MsgOptions = {}
-): Promise<void> {
-  await send(phoneNumberId, {
-    to,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      ...(opts.header ? { header: { type: 'text', text: opts.header } } : {}),
-      body: { text: body },
-      ...(opts.footer ? { footer: { text: opts.footer } } : {}),
-      action: {
-        buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })),
-      },
+  await axios.post(GUPSHUP_URL, body.toString(), {
+    headers: {
+      apikey: API_KEY,
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
   });
 }
 
+export async function sendText(to: string, _phoneNumberId: string, text: string): Promise<void> {
+  console.log('[wa] sending text to:', to);
+  try {
+    await post(to, { type: 'text', text });
+    console.log('[wa] sent OK');
+  } catch (err) {
+    console.error('[wa] Gupshup error:', err);
+    throw err;
+  }
+}
+
+export async function sendButtons(
+  to: string,
+  _phoneNumberId: string,
+  body: string,
+  buttons: WaButton[],
+  opts: MsgOptions = {}
+): Promise<void> {
+  // Gupshup quick_reply supports up to 3 buttons; fall back to numbered text for more
+  if (buttons.length <= 3) {
+    const message: Record<string, unknown> = {
+      type: 'quick_reply',
+      content: {
+        type: 'text',
+        text: body,
+        ...(opts.header ? { header: opts.header } : {}),
+        ...(opts.footer ? { footer: opts.footer } : {}),
+      },
+      options: buttons.map((b) => ({ type: 'text', title: b.title })),
+    };
+    try {
+      await post(to, message);
+    } catch (err) {
+      console.error('[wa] Gupshup sendButtons error:', err);
+      throw err;
+    }
+  } else {
+    let text = '';
+    if (opts.header) text += `*${opts.header}*\n\n`;
+    text += body + '\n\n';
+    text += buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n');
+    await sendText(to, '', text);
+  }
+}
+
 export async function sendList(
   to: string,
-  phoneNumberId: string,
+  _phoneNumberId: string,
   body: string,
   buttonLabel: string,
   sections: ListSection[],
   opts: MsgOptions = {}
 ): Promise<void> {
-  await send(phoneNumberId, {
-    to,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      ...(opts.header ? { header: { type: 'text', text: opts.header } } : {}),
-      body: { text: body },
-      ...(opts.footer ? { footer: { text: opts.footer } } : {}),
-      action: { button: buttonLabel, sections },
-    },
-  });
+  const message = {
+    type: 'list',
+    title: opts.header ?? '',
+    body,
+    globalButtons: [{ type: 'text', title: buttonLabel }],
+    items: sections.map((sec) => ({
+      title: sec.title,
+      subtitle: '',
+      options: sec.rows.map((row) => ({
+        type: 'text',
+        title: row.title,
+        description: row.description ?? '',
+        postbackText: row.id,
+      })),
+    })),
+  };
+
+  try {
+    await post(to, message);
+  } catch (err) {
+    console.error('[wa] Gupshup sendList error:', err);
+    throw err;
+  }
 }
 
 export async function sendImage(
   to: string,
-  phoneNumberId: string,
+  _phoneNumberId: string,
   imageUrl: string,
   caption?: string
 ): Promise<void> {
-  await send(phoneNumberId, {
-    to,
-    type: 'image',
-    image: { link: imageUrl, ...(caption ? { caption } : {}) },
-  });
+  console.log('[wa] sending image to:', to);
+  try {
+    await post(to, {
+      type: 'image',
+      originalUrl: imageUrl,
+      previewUrl: imageUrl,
+      caption: caption ?? '',
+    });
+    console.log('[wa] image sent OK');
+  } catch (err) {
+    console.error('[wa] Gupshup image error:', err);
+    throw err;
+  }
 }

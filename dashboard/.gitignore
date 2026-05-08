@@ -1,3 +1,6 @@
+# Local Netlify CLI cache
+.netlify/
+
 # Logs
 logs
 *.log
