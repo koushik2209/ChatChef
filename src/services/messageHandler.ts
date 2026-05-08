@@ -8,6 +8,7 @@ import prisma from '../models/prisma';
 const CHATCHEF_NUMBER = process.env.CHATCHEF_NUMBER ?? '';
 
 export async function handleIncomingMessage(message: ParsedMessage): Promise<void> {
+  console.log('[handler] incoming:', JSON.stringify(message, null, 2));
   const { from, phoneNumberId, displayPhoneNumber } = message;
 
   // ── Messages to the ChatChef number → seller flow ──────────────────────────

@@ -87,6 +87,8 @@ export function verifyWebhook(_req: Request, res: Response): void {
 export async function receiveWebhook(req: Request, res: Response): Promise<void> {
   res.status(200).end();
 
+  console.log('[webhook] raw body:', JSON.stringify(req.body, null, 2));
+
   const message = parseGupshupMessage(req.body as GupshupWebhookBody);
   if (!message) return;
 
